@@ -448,17 +448,19 @@
 
     if(changedAxis){
       ({rows,cols}=adjustGridForItemCount(changedAxis));
-    }else if(state.items.length>rows*cols){
-      rows=Math.ceil(state.items.length/cols);
-      if(rows>100){
-        cols=Math.ceil(state.items.length/100);
-        rows=Math.ceil(state.items.length/cols);
+    }else if(state.items.length > 0){
+      // ===== 枠が足りない時だけでなく、余った時も行数をピッタリに自動調整 =====
+      rows = Math.ceil(state.items.length / cols);
+      
+      if(rows > 100){
+        cols = Math.ceil(state.items.length / 100);
+        rows = Math.ceil(state.items.length / cols);
       }
-      rows=Math.min(100,Math.max(1,rows));
-      cols=Math.min(100,Math.max(1,cols));
-      els.rows.value=rows;
-      els.cols.value=cols;
-    }
+      rows = Math.min(100, Math.max(1, rows));
+      cols = Math.min(100, Math.max(1, cols));
+      els.rows.value = rows;
+      els.cols.value = cols;      
+    }    
 
     els.canvasFrame.style.width = clampNum(parseInt(els.canvasW.value)||900,MIN_CANVAS,MAX_CANVAS)+'px';
     els.canvasFrame.style.height = clampNum(parseInt(els.canvasH.value)||600,MIN_CANVAS,MAX_CANVAS)+'px';
