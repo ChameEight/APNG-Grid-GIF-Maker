@@ -151,6 +151,8 @@
         </div>
         <div id="fileList" class="fileList"></div>
         <div id="fileEmpty" class="empty">まだAPNGがありません。</div>
+        <!-- ↓↓↓ ここに1行追加 ↓↓↓ -->
+        <div id="loadStatus" class="status" style="display:none; margin-top:10px; background:#f2f0ff; color:var(--accent); font-weight:bold;"></div>
       </section>
 
       <section class="section">
@@ -286,22 +288,69 @@
       .filter(f => /image\/png/i.test(f.type) || /\.(apng|png)$/i.test(f.name))
       .sort((a,b) => a.name.localeCompare(b.name, 'ja', {numeric:true, sensitivity:'base'}));
     if(!list.length){ setStatus('PNG / APNGファイルを追加してください。'); return; }
-    showProgress(true); setProgress(3,'APNGを読み込んでいます…');
+    
+    // ★ドロップゾーンの文字要素を取得し、元のテキストを覚えておく
+    const dropzoneStrong = els.dropzone.querySelector('strong');
+    const originalText = dropzoneStrong.textContent;
+
+    showProgress(true); 
+    setProgress(3, 'APNGの読み込みを準備中…');
+    // ★ドロップした場所の文字も書き換える
+    dropzoneStrong.textContent = '読み込みを準備中…'; 
+
     (async()=>{
       try{
+        await new Promise(resolve => setTimeout(resolve, 50));
+
         for(let i=0;i<list.length;i++){
+          const msg = `${i+1} / ${list.length} 件を読み込み中…`;
+          setProgress(5 + (i/list.length)*35, msg);
+          // ★目線の位置（ドロップゾーン）にリアルタイムで進捗を表示
+          dropzoneStrong.textContent = msg; 
+          
+          await new Promise(resolve => setTimeout(resolve, 30));
+
           const item = await decodeFile(list[i]);
           state.items.push(item);
-          setProgress(5 + ((i+1)/list.length)*35, `${i+1} / ${list.length} 件を読み込み中…`);
         }
+        
+        // ===== ここから追加：画像数に合わせて列数と行数を自動変更 =====
+        const count = state.items.length; // 現在の画像の総数を取得
+        if (count <= 6) {
+          els.cols.value = 2; // 6枚以下は2列
+        } else if (count <= 12) {
+          els.cols.value = 3; // 7〜12枚は3列
+        } else if (count <= 24) {
+          els.cols.value = 4; // 13〜24枚は4列
+        } else {
+          els.cols.value = 5; // 25枚以上は5列
+        }
+        // 列数に合わせて「行数」もピッタリ収まるように自動計算
+        els.rows.value = Math.ceil(count / els.cols.value);
+        // ===== ここまで追加 =====
+
+        setProgress(40, '画面の配置を計算中…');
+        dropzoneStrong.textContent = '画面の配置を計算中…';
+        await new Promise(resolve => setTimeout(resolve, 30));
+
         renderAll();
-        setStatus(`${state.items.length}個のAPNGを配置しました。プレビュー上の画像をドラッグして並び替えできます。`);
+        
+        // ===== 上で作った専用枠にメッセージを表示 =====
+        const loadStatus = document.getElementById('loadStatus');
+        if(loadStatus) {
+            loadStatus.style.display = 'block';
+            loadStatus.textContent = `${state.items.length}個のAPNGを配置しました。プレビュー上の画像をドラッグして並び替えできます。`;
+        }        
+        
       }catch(err){
         console.error(err); setStatus('読み込みに失敗したファイルがあります。APNGとして正しいか確認してください。');
-      }finally{ showProgress(false); }
+      }finally{ 
+        showProgress(false); 
+        // ★処理が終わったら、元の「ここへAPNGをまとめて...」のテキストに戻す
+        dropzoneStrong.textContent = originalText; 
+      }
     })();
   }
-
   function renderFileList(){
     els.fileList.innerHTML='';
     els.fileEmpty.style.display = state.items.length ? 'none':'block';
