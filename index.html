@@ -1,0 +1,736 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>APNG グリッドGIFメーカー</title>
+<style>
+  :root{--bg:#f5f7fb;--panel:#fff;--line:#dfe4ec;--text:#253044;--muted:#6d7789;--accent:#6c63ff;--accent2:#eceaff;--danger:#e85d75;--shadow:0 8px 24px rgba(35,43,61,.08)}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif}
+  button,input,select{font:inherit}
+  button{cursor:pointer}
+  .app{max-width:1500px;margin:0 auto;padding:18px}
+  .header{display:flex;justify-content:space-between;gap:16px;align-items:flex-end;margin-bottom:16px}
+  h1{margin:0;font-size:24px}
+  .lead{color:var(--muted);font-size:13px;margin-top:4px}
+  .badge{background:#fff;border:1px solid var(--line);padding:7px 10px;border-radius:999px;font-size:12px;color:var(--muted)}
+  .layout{display:grid;grid-template-columns:370px minmax(0,1fr);gap:16px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow)}
+  .controls{padding:16px;position:sticky;top:12px;align-self:start;max-height:calc(100vh - 30px);overflow:auto}
+  .section{padding:0 0 16px;margin:0 0 16px;border-bottom:1px solid var(--line)}
+  .section:last-child{border-bottom:0;margin-bottom:0;padding-bottom:0}
+  .section h2{font-size:14px;margin:0 0 10px}
+  .dropzone{border:2px dashed #cdd3df;border-radius:14px;padding:18px;text-align:center;background:#fafbfe;transition:.15s}
+  .dropzone.dragover{border-color:var(--accent);background:#f2f0ff}
+  .dropzone strong{display:block;font-size:15px;margin-bottom:5px}
+  .dropzone span{color:var(--muted);font-size:12px;display:block;line-height:1.6}
+  .btnrow{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  .btn{border:1px solid var(--line);background:#fff;border-radius:9px;padding:8px 11px;color:var(--text);font-weight:600}
+  .btn:hover{background:#fafbff}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.danger{color:var(--danger)}
+  .btn.wide{width:100%;padding:11px}
+  .fieldgrid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  .field label{display:block;font-size:11px;color:var(--muted);margin-bottom:4px}
+  .field input,.field select{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 9px;background:#fff}
+  .bgOptions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:#fff}
+  .radioOption{display:inline-flex;align-items:center;gap:5px;font-size:13px;white-space:nowrap;cursor:pointer}
+  .radioOption input{width:auto;margin:0;padding:0}
+  #bgColor{width:44px !important;flex:0 0 44px;border-radius:7px}
+  .inline{display:flex;align-items:center;gap:8px}
+  .inline input[type=number]{width:70px}
+  .hint{font-size:11px;color:var(--muted);line-height:1.65;margin-top:8px}
+  .presetrow{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}
+  .preset{border:1px solid var(--line);background:#fff;border-radius:8px;padding:6px 8px;font-size:12px}
+  .preset.active{border-color:var(--accent);background:var(--accent2);color:#5149d5}
+  .progressWrap{display:none;margin-top:10px}
+  .progressWrap.show{display:block}
+  .progressTop{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:5px}
+  .progress{height:9px;background:#eef1f6;border-radius:999px;overflow:hidden}
+  .progress > div{height:100%;width:0;background:linear-gradient(90deg,#6c63ff,#8f87ff);transition:width .12s}
+  .fileList{margin-top:10px;display:flex;flex-direction:column;gap:7px}
+  .fileItem{display:grid;grid-template-columns:52px 1fr auto;gap:8px;align-items:center;padding:7px;border:1px solid var(--line);border-radius:10px;background:#fff}
+  .thumb{width:52px;height:52px;border-radius:8px;background:#f1f3f7;object-fit:contain}
+  .fileName{font-size:12px;font-weight:600;word-break:break-all;line-height:1.25}
+  .meta{font-size:10px;color:var(--muted);margin-top:3px}
+  .remove{border:0;background:transparent;color:#a1a8b4;font-size:18px;padding:2px 4px}
+  .remove:hover{color:var(--danger)}
+  .workspace{padding:14px;min-width:0}
+  .workspaceTop{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
+  .workspaceTop .small{font-size:12px;color:var(--muted)}
+  .canvasStage{min-height:610px;border:1px solid var(--line);border-radius:14px;background:repeating-conic-gradient(#f3f4f7 0 25%,#fff 0 50%) 0/22px 22px;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:28px}
+  .canvasFrame{position:relative;background:#fff;box-shadow:0 12px 38px rgba(31,37,53,.18);border:1px solid #cbd1dc;overflow:hidden;flex:0 0 auto;transition:width 0.2s, height 0.2s}
+  .cellGrid{width:100%;height:100%;display:grid;gap:8px;padding:10px}
+  
+  .cellGrid.no-margin { gap: 0 !important; padding: 0 !important; }
+  .cellGrid.no-margin .cell { border: none; border-radius: 0; background: transparent; }
+  
+  .cell{position:relative;min-width:0;min-height:0;background:#f8f9fb;border:1px solid #e0e4eb;border-radius:10px;display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:grab;transition:box-shadow .12s,border-color .12s}
+  .cell.emptyCell{cursor:default;background:rgba(248,249,251,.72);border-style:dashed}
+  .cell canvas{max-width:100%;max-height:100%;width:100%;height:100%;object-fit:contain;pointer-events:none}
+  .cellNum{position:absolute;left:6px;top:5px;background:rgba(37,48,68,.75);color:#fff;font-size:10px;border-radius:999px;padding:2px 6px;z-index:2;pointer-events:none}
+  
+  .sortable-ghost { opacity: 0.2; background: #f0f2f6; border: 2px dashed #a1a8b4; }
+  .sortable-ghost canvas { opacity: 0; }
+  .sortable-floating { z-index: 9999; box-shadow: 0 16px 32px rgba(108,99,255,0.3); border-color: #6c63ff; transform: scale(1.05); cursor: grabbing; opacity: 1 !important; background: #fff; }
+
+  .resizeHandle{position:absolute;width:24px;height:24px;background:rgba(255,255,255,.9);border:1px solid #cfd5e1;border-radius:7px;box-shadow:0 2px 8px rgba(31,37,53,.14);z-index:8;touch-action:none}
+  .resizeHandle::before{content:"";position:absolute;left:6px;top:6px;width:10px;height:10px;border-right:2px solid #6c63ff;border-bottom:2px solid #6c63ff}
+  .resizeHandle.tl{left:0;top:0;cursor:nwse-resize}.resizeHandle.tl::before{transform:rotate(180deg)}
+  .resizeHandle.tr{right:0;top:0;cursor:nesw-resize}.resizeHandle.tr::before{transform:rotate(270deg)}
+  .resizeHandle.bl{left:0;bottom:0;cursor:nesw-resize}.resizeHandle.bl::before{transform:rotate(90deg)}
+  .resizeHandle.br{right:0;bottom:0;cursor:nwse-resize}
+  .sizeTag{position:absolute;bottom:7px;left:50%;transform:translateX(-50%);background:rgba(37,48,68,.78);color:#fff;font-size:11px;padding:3px 7px;border-radius:6px;pointer-events:none}
+  .empty{padding:36px 16px;color:var(--muted);text-align:center;font-size:13px}
+  .status{margin-top:10px;padding:9px 11px;border-radius:9px;background:#f7f8fb;color:var(--muted);font-size:12px;line-height:1.5}
+  .result{margin-top:12px;display:none;border:1px solid var(--line);border-radius:12px;background:#fafbfe;padding:11px}
+  .result.show{display:block}
+  .result img{display:block;max-width:100%;max-height:400px;margin:0 auto;border-radius:8px;background:repeating-conic-gradient(#eee 0 25%,#fff 0 50%) 0/16px 16px}
+  .resultInfo{font-size:11px;color:var(--muted);margin:8px 0}
+  .kbd{font-size:10px;border:1px solid var(--line);background:#fff;padding:2px 5px;border-radius:5px}
+  @media(max-width:1050px){.layout{grid-template-columns:1fr}.controls{position:static;max-height:none}.canvasStage{min-height:520px}}
+  @media(max-width:700px){.app{padding:10px}.header{align-items:flex-start;flex-direction:column}.canvasStage{min-height:440px;padding:15px}.workspace{padding:10px}.fieldgrid{grid-template-columns:1fr 1fr}}
+
+ 
+  /* 左側のファイルリストを非表示にする */
+  #fileList, #fileEmpty {
+    display: none !important; 
+  }
+  
+  /* プレビュー画像内の×ボタン（ズームされても大きさを一定に保つ） */
+  .cellRemove {
+    position: absolute;
+    /* ズーム倍率（--scale）で割り算して大きさを打ち消す */
+    top: calc(5px / var(--scale, 1));
+    right: calc(5px / var(--scale, 1));
+    width: calc(22px / var(--scale, 1));
+    height: calc(22px / var(--scale, 1));
+    font-size: calc(14px / var(--scale, 1));
+    border: calc(1px / var(--scale, 1)) solid var(--line);
+    
+    background: rgba(255, 255, 255, 0.9);
+    color: var(--danger);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 10;
+    padding: 0;
+    box-shadow: 0 calc(2px / var(--scale, 1)) calc(4px / var(--scale, 1)) rgba(0,0,0,0.1);
+  }
+  
+  .cellRemove:hover {
+    background: var(--danger);
+    color: #fff;
+    border-color: var(--danger);
+  }
+  
+  /* マウスを乗せたときにボタンを赤くする */
+  .cellRemove:hover {
+    background: var(--danger);
+    color: #fff;
+    border-color: var(--danger);
+  }
+ 
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div>
+      <h1>APNG グリッドGIFメーカー</h1>
+      <div class="lead">複数のAPNGを並べて、note掲載用の「まとめGIF」をブラウザだけで作成します。</div>
+    </div>
+    <div class="badge">ローカル処理 / 外部アップロードなし</div>
+  </div>
+
+  <div class="layout">
+    <aside class="panel controls">
+      <section class="section">
+        <h2>1. APNGを追加</h2>
+        <div id="dropzone" class="dropzone">
+          <strong>ここへAPNGをまとめてドラッグ＆ドロップ</strong>
+          <span>複数選択OK / PNG・APNG<br>クリックしてファイル選択もできます</span>
+          <input id="fileInput" type="file" accept="image/png,.apng" multiple hidden>
+          <div class="btnrow"><button class="btn primary" id="chooseBtn">ファイルを選ぶ</button></div>
+        </div>
+        <div id="fileList" class="fileList"></div>
+        <div id="fileEmpty" class="empty">まだAPNGがありません。</div>
+      </section>
+
+      <section class="section">
+        <h2>2. 配置</h2>
+        <div class="fieldgrid">
+          <div class="field"><label>行</label><input id="rows" type="number" min="1" max="100" value="2"></div>
+          <div class="field"><label>列</label><input id="cols" type="number" min="1" max="100" value="2"></div>
+        </div>
+        <div class="hint">プレビュー上の画像を<strong>ドラッグ＆ドロップ</strong>すると、画像を好きな位置に挿入してズラすことができます。<br>※行や列を変更すると、キャンバスサイズも自動で最適化されます。</div>
+      </section>
+
+      <section class="section">
+        <h2>3. キャンバスサイズ</h2>
+        <div class="fieldgrid">
+          <div class="field"><label>幅(px)</label><input id="canvasW" type="number" min="20" max="2400" value="900"></div>
+          <div class="field"><label>高さ(px)</label><input id="canvasH" type="number" min="20" max="2400" value="600"></div>
+        </div>
+        <div class="presetrow">
+          <button class="preset active" data-size="900x600">横長</button>
+          <button class="preset" data-size="600x900">縦長</button>
+          <button class="preset" data-size="800x800">正方形</button>
+          <button class="preset" data-size="1200x630">note横長</button>
+        </div>
+        <div class="hint">数値入力でも変更できます。プレビュー四隅の<strong>紫色のハンドル</strong>をマウスでドラッグすると直感的にサイズを決められます。</div>
+      </section>
+
+     <section class="section">
+        <h2>4. アニメーション</h2>
+        <div class="fieldgrid">
+          <div class="field"><label>長さ（秒）</label><input id="duration" type="number" min="0.5" max="15" step="0.5" value="2"></div>
+          <div class="field"><label>FPS</label><input id="fps" type="number" min="5" max="20" step="1" value="10"></div>
+        </div>
+        <div class="field" style="margin-top:9px">
+          <label>背景</label>
+          <div class="bgOptions">
+            <label class="radioOption"><input type="radio" name="bgMode" value="white" checked> 白</label>
+            <label class="radioOption"><input type="radio" name="bgMode" value="color"> 色を指定</label>
+            <input id="bgColor" type="color" value="#ffffff" title="背景色を選択" style="height:32px;padding:2px">
+            <label class="radioOption"><input type="radio" name="bgMode" value="transparent"> 透明</label>
+          </div>
+        </div>
+        <div class="hint">※すべてのAPNGを同じ秒数・FPSで同期して書き出します。元APNGが短い場合は自動でループします。</div>
+      </section>
+
+      <section class="section">
+        <h2>5. GIFを書き出す</h2>
+        <button id="makeGif" class="btn primary wide">GIFを作成する</button>
+        <div id="progressWrap" class="progressWrap">
+          <div class="progressTop"><span id="progressLabel">準備中…</span><span id="progressPct">0%</span></div>
+          <div class="progress"><div id="progressBar"></div></div>
+        </div>
+        <div id="status" class="status">APNGを追加するとプレビューできます。</div>
+        <div id="result" class="result">
+          <img id="resultImg" alt="生成GIFプレビュー">
+          <div id="resultInfo" class="resultInfo"></div>
+          <button id="downloadBtn" class="btn primary wide">GIFを保存</button>
+        </div>
+      </section>
+    </aside>
+
+    <main class="panel workspace">
+      <div class="workspaceTop">
+        <div><strong>プレビュー</strong> <span class="small">各枠は自動で均等配置</span></div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <button id="removeMarginBtn" class="btn" style="padding:5px 9px; font-size:12px;">余白をすべて削除</button>
+          <div class="small"><span class="kbd">ドラッグ</span> でサイズ変更</div>
+        </div>
+      </div>
+      <div id="stage" class="canvasStage">
+        <div id="canvasFrame" class="canvasFrame" style="width:900px;height:600px">
+          <div id="cellGrid" class="cellGrid"></div>
+          <div id="sizeTag" class="sizeTag">900 × 600 px</div>
+          <div class="resizeHandle tl" data-dir="tl" title="左上からサイズ変更"></div>
+          <div class="resizeHandle tr" data-dir="tr" title="右上からサイズ変更"></div>
+          <div class="resizeHandle bl" data-dir="bl" title="左下からサイズ変更"></div>
+          <div class="resizeHandle br" data-dir="br" title="右下からサイズ変更"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script src="https://unpkg.com/@upng/upng-js@2.2.2/dist/UPNG.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const els = {
+    dropzone:$('dropzone'), fileInput:$('fileInput'), chooseBtn:$('chooseBtn'), fileList:$('fileList'), fileEmpty:$('fileEmpty'),
+    rows:$('rows'), cols:$('cols'), canvasW:$('canvasW'), canvasH:$('canvasH'),
+    canvasFrame:$('canvasFrame'), cellGrid:$('cellGrid'), resizeHandles:document.querySelectorAll('.resizeHandle'), sizeTag:$('sizeTag'), stage:$('stage'),
+    duration:$('duration'), fps:$('fps'), bgColor:$('bgColor'), makeGif:$('makeGif'), progressWrap:$('progressWrap'),
+    progressBar:$('progressBar'), progressLabel:$('progressLabel'), progressPct:$('progressPct'), status:$('status'),
+    result:$('result'), resultImg:$('resultImg'), resultInfo:$('resultInfo'), downloadBtn:$('downloadBtn'),
+    removeMarginBtn:$('removeMarginBtn')
+  };
+  const state = { items: [], resize:null, workerUrl:null, resultUrl:null, draggingIndex:null, gifBusy:false, previewScale:1, noMargin:false };
+  
+  let sortableInstance = null;
+  const MIN_CANVAS = 20;
+  const MAX_CANVAS = 2400;
+
+  els.bgColor.disabled=true;
+
+  function setStatus(text){ els.status.textContent = text; }
+  function setProgress(pct,label){
+    const p = Math.max(0,Math.min(100,pct));
+    els.progressBar.style.width = p + '%';
+    els.progressPct.textContent = Math.round(p) + '%';
+    if(label) els.progressLabel.textContent = label;
+  }
+  function showProgress(show){ els.progressWrap.classList.toggle('show', show); }
+
+  async function decodeFile(file){
+    const buf = await file.arrayBuffer();
+    const img = UPNG.decode(buf);
+    const frames = UPNG.toRGBA8(img);
+    const delays = (img.frames && img.frames.length)
+      ? img.frames.map(f => Math.max(20, Number(f.delay) || 100))
+      : [100];
+    const duration = delays.reduce((a,b)=>a+b,0);
+    const item = {
+      id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()+Math.random()),
+      file,name:file.name,width:img.width,height:img.height,frames,delays,duration
+    };
+    return item;
+  }
+
+  function addFiles(files){
+    const list = [...files]
+      .filter(f => /image\/png/i.test(f.type) || /\.(apng|png)$/i.test(f.name))
+      .sort((a,b) => a.name.localeCompare(b.name, 'ja', {numeric:true, sensitivity:'base'}));
+    if(!list.length){ setStatus('PNG / APNGファイルを追加してください。'); return; }
+    showProgress(true); setProgress(3,'APNGを読み込んでいます…');
+    (async()=>{
+      try{
+        for(let i=0;i<list.length;i++){
+          const item = await decodeFile(list[i]);
+          state.items.push(item);
+          setProgress(5 + ((i+1)/list.length)*35, `${i+1} / ${list.length} 件を読み込み中…`);
+        }
+        renderAll();
+        setStatus(`${state.items.length}個のAPNGを配置しました。プレビュー上の画像をドラッグして並び替えできます。`);
+      }catch(err){
+        console.error(err); setStatus('読み込みに失敗したファイルがあります。APNGとして正しいか確認してください。');
+      }finally{ showProgress(false); }
+    })();
+  }
+
+  function renderFileList(){
+    els.fileList.innerHTML='';
+    els.fileEmpty.style.display = state.items.length ? 'none':'block';
+    state.items.forEach((item,index)=>{
+      const div=document.createElement('div'); div.className='fileItem'; div.dataset.index=index;
+      div.innerHTML=`<canvas class="thumb" width="52" height="52"></canvas><div><div class="fileName"></div><div class="meta"></div></div><button class="remove" title="削除">×</button>`;
+      div.querySelector('.fileName').textContent=item.name;
+      div.querySelector('.meta').textContent=`${item.width}×${item.height}px / ${item.frames.length}フレーム / ${(item.duration/1000).toFixed(2)}秒`;
+      const tc=div.querySelector('.thumb').getContext('2d');
+      const thumbFrame=new ImageData(new Uint8ClampedArray(item.frames[0]), item.width, item.height);
+      const tmp=document.createElement('canvas'); tmp.width=item.width;tmp.height=item.height; tmp.getContext('2d').putImageData(thumbFrame,0,0);
+      tc.clearRect(0,0,52,52); const s=Math.min(52/item.width,52/item.height); const w=item.width*s,h=item.height*s; tc.drawImage(tmp,(52-w)/2,(52-h)/2,w,h);
+      div.querySelector('.remove').addEventListener('click',()=>{state.items.splice(index,1);renderAll();});
+      els.fileList.appendChild(div);
+    });
+  }
+
+  function renderAll(){ renderFileList(); renderGrid(); }
+
+  function getRowsCols(){
+    const rows=Math.max(1,Math.min(100,parseInt(els.rows.value)||1));
+    const cols=Math.max(1,Math.min(100,parseInt(els.cols.value)||1));
+    els.rows.value=rows;els.cols.value=cols;return {rows,cols};
+  }
+
+  function adjustGridForItemCount(changedAxis){
+    let {rows,cols}=getRowsCols();
+    const count=state.items.length;
+    if(!count) return {rows,cols};
+
+    if(changedAxis==='rows') cols=Math.ceil(count/rows);
+    if(changedAxis==='cols') rows=Math.ceil(count/cols);
+
+    if(cols>100){ cols=100; rows=Math.ceil(count/cols); }
+    if(rows>100){ rows=100; cols=Math.ceil(count/rows); }
+    rows=Math.max(1,Math.min(100,rows));
+    cols=Math.max(1,Math.min(100,cols));
+    els.rows.value=rows;
+    els.cols.value=cols;
+    return {rows,cols};
+  }
+
+  function fitCanvasPreview(){
+    const w=clampNum(parseInt(els.canvasW.value)||900,MIN_CANVAS,MAX_CANVAS);
+    const h=clampNum(parseInt(els.canvasH.value)||600,MIN_CANVAS,MAX_CANVAS);
+    const cs=getComputedStyle(els.stage);
+    const padX=(parseFloat(cs.paddingLeft)||0)+(parseFloat(cs.paddingRight)||0)+2;
+    const padY=(parseFloat(cs.paddingTop)||0)+(parseFloat(cs.paddingBottom)||0)+2;
+    const availableW=Math.max(120,els.stage.clientWidth-padX);
+    const availableH=Math.max(120,els.stage.clientHeight-padY);
+    state.previewScale=Math.min(1,availableW/w,availableH/h);
+    if(!Number.isFinite(state.previewScale)||state.previewScale<=0) state.previewScale=1;
+    els.canvasFrame.style.zoom=state.previewScale;
+	// ▼▼▼現在のズーム倍率（--scale）をCSSに渡す▼▼▼
+    els.canvasFrame.style.setProperty('--scale', state.previewScale);
+  }
+
+  function autoFitCanvasSize() {
+    if (!state.items.length) return;
+    const { rows, cols } = getRowsCols();
+    const refItem = state.items[0]; 
+    
+    const gap = state.noMargin ? 0 : 8;
+    const pad = state.noMargin ? 0 : 10;
+    
+    const idealW = refItem.width * cols + gap * (cols - 1) + pad * 2;
+    const idealH = refItem.height * rows + gap * (rows - 1) + pad * 2;
+    
+    const gridAspect = idealW / idealH;
+    
+    let targetW = parseInt(els.canvasW.value) || 900;
+    let targetH = Math.round(targetW / gridAspect);
+    
+    if (targetH > MAX_CANVAS) {
+      targetH = MAX_CANVAS;
+      targetW = Math.round(targetH * gridAspect);
+    } else if (targetH < MIN_CANVAS) {
+      targetH = MIN_CANVAS;
+      targetW = Math.round(targetH * gridAspect);
+    }
+    
+    targetW = clampNum(targetW, MIN_CANVAS, MAX_CANVAS);
+    targetH = clampNum(targetH, MIN_CANVAS, MAX_CANVAS);
+    
+    els.canvasW.value = targetW;
+    els.canvasH.value = targetH;
+    els.canvasFrame.style.width = targetW + 'px';
+    els.canvasFrame.style.height = targetH + 'px';
+    els.sizeTag.textContent = `${targetW} × ${targetH} px`;
+    
+    document.querySelectorAll('.preset').forEach(b => b.classList.toggle('active', b.dataset.size === `${targetW}x${targetH}`));
+  }
+
+  function renderGrid(changedAxis=null){
+    let {rows,cols}=getRowsCols();
+
+    if(changedAxis){
+      ({rows,cols}=adjustGridForItemCount(changedAxis));
+    }else if(state.items.length>rows*cols){
+      rows=Math.ceil(state.items.length/cols);
+      if(rows>100){
+        cols=Math.ceil(state.items.length/100);
+        rows=Math.ceil(state.items.length/cols);
+      }
+      rows=Math.min(100,Math.max(1,rows));
+      cols=Math.min(100,Math.max(1,cols));
+      els.rows.value=rows;
+      els.cols.value=cols;
+    }
+
+    els.canvasFrame.style.width = clampNum(parseInt(els.canvasW.value)||900,MIN_CANVAS,MAX_CANVAS)+'px';
+    els.canvasFrame.style.height = clampNum(parseInt(els.canvasH.value)||600,MIN_CANVAS,MAX_CANVAS)+'px';
+    syncSizeUI();
+    els.cellGrid.style.gridTemplateColumns=`repeat(${cols}, minmax(0,1fr))`;
+    els.cellGrid.style.gridTemplateRows=`repeat(${rows}, minmax(0,1fr))`;
+    els.cellGrid.innerHTML='';
+
+    const total=rows*cols;
+    for(let i=0;i<total;i++){
+      const item=state.items[i];
+      const cell=document.createElement('div');
+      cell.className='cell' + (item ? '' : ' emptyCell');
+      cell.dataset.index=i;
+      const num=document.createElement('span');num.className='cellNum';num.textContent=i+1;cell.appendChild(num);
+
+      if(item){
+        const canvas=document.createElement('canvas');
+        canvas.width=item.width;canvas.height=item.height;cell.appendChild(canvas);
+        cell.dataset.id=item.id;
+
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'cellRemove';
+        removeBtn.innerHTML = '×';
+        removeBtn.title = '削除';
+        
+        // ×ボタンがクリックされたときの動き
+        removeBtn.addEventListener('click', (e) => {
+          e.stopPropagation();      // ボタンを押したときに、後ろの画像をドラッグしてしまうのを防ぐ
+          state.items.splice(i, 1); // 登録されている画像データから、この画像を消す
+          renderAll();              // 画面全体を再描画して最新の状態にする
+        });
+        
+        cell.appendChild(removeBtn); // 画面（セル）の中に×ボタンを配置する       
+
+      }else{
+        cell.insertAdjacentHTML('beforeend','<span style="font-size:12px;color:#a2a9b5">空き</span>');
+      }
+      els.cellGrid.appendChild(cell);
+    }
+    
+    if(!state.items.length){
+      els.cellGrid.innerHTML='<div class="empty" style="grid-column:1/-1;align-self:center">左側からAPNGを追加してください。</div>';
+    }
+    
+    autoFitCanvasSize();
+    fitCanvasPreview();
+
+    if(sortableInstance) sortableInstance.destroy();
+
+    sortableInstance = new Sortable(els.cellGrid, {
+      animation: 250, 
+      ghostClass: 'sortable-ghost',
+      forceFallback: true,         
+      fallbackClass: 'sortable-floating', 
+      fallbackOnBody: true,        
+      filter: '.emptyCell',        
+      onEnd: function (evt) {
+        const from = evt.oldIndex;
+        const to = evt.newIndex;
+        if (from === to) return;
+
+        if (from < state.items.length) {
+          const [moved] = state.items.splice(from, 1);
+          if (to < state.items.length) {
+            state.items.splice(to, 0, moved);
+          } else {
+            state.items.push(moved);
+          }
+        }
+        renderAll();
+      }
+    });
+  }
+
+  function syncSizeUI(){
+    const ew=clampNum(parseInt(els.canvasW.value)||900,MIN_CANVAS,MAX_CANVAS);
+    const eh=clampNum(parseInt(els.canvasH.value)||600,MIN_CANVAS,MAX_CANVAS);
+    els.canvasFrame.style.width=ew+'px'; els.canvasFrame.style.height=eh+'px';
+    els.sizeTag.textContent=`${ew} × ${eh} px`;
+  }
+  function clampNum(v,min,max){return Math.max(min,Math.min(max,v));}
+
+  function setCanvasSize(w,h){
+    w=clampNum(Math.round(w),MIN_CANVAS,MAX_CANVAS);h=clampNum(Math.round(h),MIN_CANVAS,MAX_CANVAS);
+    els.canvasW.value=w;els.canvasH.value=h;els.canvasFrame.style.width=w+'px';els.canvasFrame.style.height=h+'px';els.sizeTag.textContent=`${w} × ${h} px`;
+    document.querySelectorAll('.preset').forEach(b=>b.classList.toggle('active',b.dataset.size===`${w}x${h}`));
+    fitCanvasPreview();
+  }
+
+  els.resizeHandles.forEach(handle=>{
+    handle.addEventListener('pointerdown',e=>{
+      e.preventDefault();
+      handle.setPointerCapture?.(e.pointerId);
+      state.resize={
+        startX:e.clientX,
+        startY:e.clientY,
+        startW:parseInt(els.canvasW.value)||900,
+        startH:parseInt(els.canvasH.value)||600,
+        startScale:state.previewScale||1,
+        dir:handle.dataset.dir
+      };
+    });
+  });
+  window.addEventListener('pointermove',e=>{
+    if(!state.resize)return;
+    const scale=state.resize.startScale||1;
+    const dx=((e.clientX-state.resize.startX)/scale)*1.35;
+    const dy=((e.clientY-state.resize.startY)/scale)*1.35;
+    const dir=state.resize.dir;
+    const w=state.resize.startW + (dir.includes('r') ? dx : -dx);
+    const h=state.resize.startH + (dir.includes('b') ? dy : -dy);
+    setCanvasSize(w,h);
+  });
+  window.addEventListener('pointerup',()=>{state.resize=null;fitCanvasPreview();});
+  window.addEventListener('pointercancel',()=>{state.resize=null;fitCanvasPreview();});
+  window.addEventListener('resize',()=>fitCanvasPreview());
+
+  els.chooseBtn.addEventListener('click',()=>els.fileInput.click());
+  els.fileInput.addEventListener('change',()=>{addFiles(els.fileInput.files);els.fileInput.value='';});
+  ['dragenter','dragover'].forEach(ev=>els.dropzone.addEventListener(ev,e=>{e.preventDefault();els.dropzone.classList.add('dragover');}));
+  ['dragleave','drop'].forEach(ev=>els.dropzone.addEventListener(ev,e=>{e.preventDefault();els.dropzone.classList.remove('dragover');}));
+  els.dropzone.addEventListener('drop',e=>addFiles(e.dataTransfer.files));
+  
+  els.rows.addEventListener('input',()=>renderGrid('rows'));
+  els.cols.addEventListener('input',()=>renderGrid('cols'));
+  
+  [els.canvasW,els.canvasH].forEach(x=>x.addEventListener('change',()=>setCanvasSize(parseInt(els.canvasW.value)||900,parseInt(els.canvasH.value)||600)));
+  document.querySelectorAll('.preset').forEach(btn=>btn.addEventListener('click',()=>{const [w,h]=btn.dataset.size.split('x').map(Number);setCanvasSize(w,h);}));
+
+  els.removeMarginBtn.addEventListener('click', () => {
+    state.noMargin = !state.noMargin;
+    els.removeMarginBtn.textContent = state.noMargin ? '余白を元に戻す' : '余白をすべて削除';
+    els.cellGrid.classList.toggle('no-margin', state.noMargin);
+    
+    if (state.items.length > 0) {
+      autoFitCanvasSize();
+      fitCanvasPreview();
+    }
+  });
+
+  function frameAt(item,timeMs){
+    if(!item.frames.length)return null;
+    const total=item.duration||100;
+    let t=((timeMs%total)+total)%total;
+    for(let i=0;i<item.delays.length;i++){ if(t < item.delays[i]) return i; t-=item.delays[i]; }
+    return item.frames.length-1;
+  }
+
+  const TRANSPARENT_KEY = 0xFF00FE;
+  const TRANSPARENT_KEY_RGB = [255, 0, 254];
+  const ALPHA_CUTOFF = 20;
+
+  function getBgMode(){ return document.querySelector('input[name="bgMode"]:checked')?.value || 'white'; }
+
+  function hexToRgb(hex){
+    const m=/^#?([0-9a-f]{6})$/i.exec(hex||'');
+    if(!m) return [255,255,255];
+    const n=parseInt(m[1],16);
+    return [(n>>16)&255,(n>>8)&255,n&255];
+  }
+
+  function makeSourceCanvas(item, frameIndex){
+    const src=document.createElement('canvas');
+    src.width=item.width; src.height=item.height;
+    src.getContext('2d',{willReadFrequently:true}).putImageData(
+      new ImageData(new Uint8ClampedArray(item.frames[frameIndex]),item.width,item.height),0,0
+    );
+    return src;
+  }
+
+  function makeAlphaSafeBitmap(item, frameIndex, dw, dh){
+    const src=makeSourceCanvas(item,frameIndex);
+    const scaled=document.createElement('canvas');
+    scaled.width=Math.max(1,Math.round(dw));
+    scaled.height=Math.max(1,Math.round(dh));
+    const sctx=scaled.getContext('2d',{willReadFrequently:true});
+    sctx.clearRect(0,0,scaled.width,scaled.height);
+    sctx.imageSmoothingEnabled=true;
+    sctx.imageSmoothingQuality='high';
+    sctx.drawImage(src,0,0,scaled.width,scaled.height);
+
+    const img=sctx.getImageData(0,0,scaled.width,scaled.height);
+    const d=img.data;
+    for(let p=0;p<d.length;p+=4){
+      const a=d[p+3];
+      if(a < ALPHA_CUTOFF){
+        d[p]=TRANSPARENT_KEY_RGB[0];
+        d[p+1]=TRANSPARENT_KEY_RGB[1];
+        d[p+2]=TRANSPARENT_KEY_RGB[2];
+        d[p+3]=255;
+      }else{
+        d[p+3]=255;
+      }
+    }
+    sctx.putImageData(img,0,0);
+    return scaled;
+  }
+
+  function drawComposite(ctx,w,h,timeMs){
+    const mode=getBgMode();
+    const bgRgb=mode==='color' ? hexToRgb(els.bgColor.value) : [255,255,255];
+
+    ctx.save();
+    ctx.fillStyle=mode==='transparent' ? '#FF00FE' : `rgb(${bgRgb[0]},${bgRgb[1]},${bgRgb[2]})`;
+    ctx.fillRect(0,0,w,h);
+    ctx.restore();
+
+    const rows=getRowsCols().rows,cols=getRowsCols().cols;
+    const gap=state.noMargin ? 0 : 8, pad=state.noMargin ? 0 : 10;
+    const innerW=w-pad*2,innerH=h-pad*2;
+    const cellW=(innerW-gap*(cols-1))/cols,cellH=(innerH-gap*(rows-1))/rows;
+
+    for(let i=0;i<state.items.length && i<rows*cols;i++){
+      const item=state.items[i],fi=frameAt(item,timeMs);
+      if(fi===null)continue;
+      const x=pad+(i%cols)*(cellW+gap), y=pad+Math.floor(i/cols)*(cellH+gap);
+      const s=Math.min(cellW/item.width,cellH/item.height);
+      const dw=Math.max(1,Math.round(item.width*s)),dh=Math.max(1,Math.round(item.height*s));
+      const dx=Math.round(x+(cellW-dw)/2),dy=Math.round(y+(cellH-dh)/2);
+
+      if(mode==='transparent'){
+        const safe=makeAlphaSafeBitmap(item,fi,dw,dh);
+        ctx.putImageData(safe.getContext('2d',{willReadFrequently:true}).getImageData(0,0,dw,dh),dx,dy);
+      }else{
+        const tmp=makeSourceCanvas(item,fi);
+        ctx.drawImage(tmp,dx,dy,dw,dh);
+      }
+    }
+  }
+
+  let lastPreview=0;
+  function animatePreview(now){
+    requestAnimationFrame(animatePreview); 
+    if(!state.items.length) return; 
+    if(now-lastPreview<60) return; 
+    lastPreview=now;
+    
+    const cells = [...els.cellGrid.querySelectorAll('.cell')]; 
+    if(!cells.length) return;
+    const t = performance.now()%((parseFloat(els.duration.value)||2)*1000);
+    
+    cells.forEach((cell) => {
+      const originalIndex = parseInt(cell.dataset.index);
+      const item = state.items[originalIndex];
+      if(!item) return;
+      
+      const canvas = cell.querySelector('canvas');
+      if(!canvas) return;
+      
+      const fi = frameAt(item, t);
+      const cctx = canvas.getContext('2d');
+      const img = new ImageData(new Uint8ClampedArray(item.frames[fi]), item.width, item.height);
+      cctx.clearRect(0,0,canvas.width,canvas.height);
+      cctx.putImageData(img,0,0);
+    });
+  }
+  requestAnimationFrame(animatePreview);
+
+  async function loadWorkerUrl(){
+    if(state.workerUrl)return state.workerUrl;
+    const url='https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js';
+    const res=await fetch(url); if(!res.ok)throw new Error('GIF workerの取得に失敗しました');
+    const text=await res.text(); state.workerUrl=URL.createObjectURL(new Blob([text],{type:'application/javascript'})); return state.workerUrl;
+  }
+
+  async function createGif(){
+    if(state.gifBusy)return;
+    if(!state.items.length){setStatus('先にAPNGを追加してください。');return;}
+    state.gifBusy=true; els.makeGif.disabled=true; els.result.classList.remove('show');
+    showProgress(true);setProgress(0,'GIF生成の準備中…');
+    try{
+      const workerScript=await loadWorkerUrl();
+      const w=clampNum(parseInt(els.canvasW.value)||900,MIN_CANVAS,MAX_CANVAS),h=clampNum(parseInt(els.canvasH.value)||600,MIN_CANVAS,MAX_CANVAS);
+      const duration=Math.max(.5,Math.min(15,parseFloat(els.duration.value)||2));
+      const fps=Math.max(5,Math.min(20,parseInt(els.fps.value)||10));
+      const frameCount=Math.max(1,Math.round(duration*fps));
+      const delay=1000/fps;
+      const out=document.createElement('canvas');out.width=w;out.height=h;const ctx=out.getContext('2d');
+      const bgMode=getBgMode();
+      const gifOptions={workers:2,workerScript,quality:8,width:w,height:h,repeat:0};
+      if(bgMode==='transparent') gifOptions.transparent=TRANSPARENT_KEY;
+      const gif=new GIF(gifOptions);
+      for(let i=0;i<frameCount;i++){
+        const time=i*delay; drawComposite(ctx,w,h,time); gif.addFrame(out,{copy:true,delay:delay});
+        setProgress((i/frameCount)*62,`フレームを準備中… ${i+1} / ${frameCount}`);
+        await new Promise(r=>setTimeout(r,0));
+      }
+      await new Promise((resolve,reject)=>{
+        gif.on('progress',p=>setProgress(62+p*38,`GIFをエンコード中… ${Math.round(p*100)}%`));
+        gif.on('finished',blob=>{ state.resultUrl=URL.createObjectURL(blob); els.resultImg.src=state.resultUrl; els.resultInfo.textContent=`${w}×${h}px / ${frameCount}フレーム / ${duration.toFixed(1)}秒 / 背景：${bgMode==='transparent'?'透明':bgMode==='color'?'指定色':'白'} / 約${(blob.size/1024/1024).toFixed(2)}MB`; els.downloadBtn.onclick=()=>downloadBlob(blob,`apng-grid-${Date.now()}.gif`); els.result.classList.add('show'); resolve(); });
+        gif.on('abort',()=>reject(new Error('GIF生成が中断されました')));
+        gif.render();
+      });
+      setProgress(100,'完成しました！');setStatus('GIFが完成しました。下の「GIFを保存」から保存できます。');
+    }catch(err){
+      console.error(err);setStatus('GIF生成に失敗しました。ブラウザのネットワーク接続、またはファイルの内容をご確認ください。');
+    }finally{state.gifBusy=false;els.makeGif.disabled=false;setTimeout(()=>showProgress(false),700);}
+  }
+
+  function downloadBlob(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000);}
+  document.querySelectorAll('input[name="bgMode"]').forEach(r=>r.addEventListener('change',()=>{
+    els.bgColor.disabled=getBgMode()!=='color';
+    const frame=document.querySelector('.canvasFrame');
+    if(frame) frame.style.background=getBgMode()==='transparent'?'repeating-conic-gradient(#eee 0 25%,#fff 0 50%) 0/16px 16px':(getBgMode()==='color'?els.bgColor.value:'#fff');
+  }));
+  els.bgColor.addEventListener('input',()=>{
+    if(getBgMode()==='color'){ const frame=document.querySelector('.canvasFrame'); if(frame) frame.style.background=els.bgColor.value; }
+  });
+  els.makeGif.addEventListener('click',createGif);
+
+  renderGrid();
+})();
+</script>
+</body>
+</html>
