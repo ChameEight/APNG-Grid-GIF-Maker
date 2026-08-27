@@ -542,8 +542,8 @@
   ['dragleave','drop'].forEach(ev=>els.dropzone.addEventListener(ev,e=>{e.preventDefault();els.dropzone.classList.remove('dragover');}));
   els.dropzone.addEventListener('drop',e=>addFiles(e.dataTransfer.files));
   
-  els.rows.addEventListener('input',()=>renderGrid('rows'));
-  els.cols.addEventListener('input',()=>renderGrid('cols'));
+  els.rows.addEventListener('change',()=>renderGrid('rows'));
+  els.cols.addEventListener('change',()=>renderGrid('cols'));
   
   [els.canvasW,els.canvasH].forEach(x=>x.addEventListener('change',()=>setCanvasSize(parseInt(els.canvasW.value)||900,parseInt(els.canvasH.value)||600)));
   document.querySelectorAll('.preset').forEach(btn=>btn.addEventListener('click',()=>{const [w,h]=btn.dataset.size.split('x').map(Number);setCanvasSize(w,h);}));
