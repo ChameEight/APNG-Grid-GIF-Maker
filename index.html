@@ -83,7 +83,7 @@
   .resizeHandle.br{right:0;bottom:0;cursor:nwse-resize}
   .sizeTag{position:absolute;bottom:7px;left:50%;transform:translateX(-50%);background:rgba(37,48,68,.78);color:#fff;font-size:11px;padding:3px 7px;border-radius:6px;pointer-events:none}
   .empty{padding:36px 16px;color:var(--muted);text-align:center;font-size:13px}
-  .status{margin-top:10px;padding:9px 11px;border-radius:9px;background:#f7f8fb;color:var(--muted);font-size:12px;line-height:1.5}
+  .status{margin-top:10px;padding:9px 11px;border-radius:999px;background:#f7f8fb;color:var(--muted);font-size:12px;line-height:1.5}
   .result{margin-top:12px;display:none;border:1px solid var(--line);border-radius:12px;background:#fafbfe;padding:11px}
   .result.show{display:block}
   .result img{display:block;max-width:100%;max-height:400px;margin:0 auto;border-radius:8px;background:repeating-conic-gradient(#eee 0 25%,#fff 0 50%) 0/16px 16px}
@@ -121,13 +121,6 @@
     box-shadow: 0 calc(2px / var(--scale, 1)) calc(4px / var(--scale, 1)) rgba(0,0,0,0.1);
   }
   
-  .cellRemove:hover {
-    background: var(--danger);
-    color: #fff;
-    border-color: var(--danger);
-  }
-  
-  /* マウスを乗せたときにボタンを赤くする */
   .cellRemove:hover {
     background: var(--danger);
     color: #fff;
@@ -362,7 +355,6 @@
     state.previewScale=Math.min(1,availableW/w,availableH/h);
     if(!Number.isFinite(state.previewScale)||state.previewScale<=0) state.previewScale=1;
     els.canvasFrame.style.zoom=state.previewScale;
-	// ▼▼▼現在のズーム倍率（--scale）をCSSに渡す▼▼▼
     els.canvasFrame.style.setProperty('--scale', state.previewScale);
   }
 
@@ -444,14 +436,13 @@
         removeBtn.innerHTML = '×';
         removeBtn.title = '削除';
         
-        // ×ボタンがクリックされたときの動き
         removeBtn.addEventListener('click', (e) => {
-          e.stopPropagation();      // ボタンを押したときに、後ろの画像をドラッグしてしまうのを防ぐ
-          state.items.splice(i, 1); // 登録されている画像データから、この画像を消す
-          renderAll();              // 画面全体を再描画して最新の状態にする
+          e.stopPropagation();
+          state.items.splice(i, 1);
+          renderAll();
         });
         
-        cell.appendChild(removeBtn); // 画面（セル）の中に×ボタンを配置する       
+        cell.appendChild(removeBtn);
 
       }else{
         cell.insertAdjacentHTML('beforeend','<span style="font-size:12px;color:#a2a9b5">空き</span>');
@@ -718,7 +709,34 @@
     }finally{state.gifBusy=false;els.makeGif.disabled=false;setTimeout(()=>showProgress(false),700);}
   }
 
-  function downloadBlob(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000);}
+  // === GIF保存 / 共有処理 ===
+  async function downloadBlob(blob, name) {
+    const file = new File([blob], name, { type: 'image/gif' });
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+    // スマホかつ共有APIが利用可能な場合
+    if (isMobile && navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({
+          files: [file],
+          title: '合成GIF画像'
+        });
+      } catch (err) {
+        console.log('共有がキャンセルされました:', err);
+      }
+    } else {
+      // PC等の場合：従来の直接ダウンロード
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+  }
+
   document.querySelectorAll('input[name="bgMode"]').forEach(r=>r.addEventListener('change',()=>{
     els.bgColor.disabled=getBgMode()!=='color';
     const frame=document.querySelector('.canvasFrame');
