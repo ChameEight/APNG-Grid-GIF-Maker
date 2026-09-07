@@ -92,7 +92,6 @@
   @media(max-width:1050px){.layout{grid-template-columns:1fr}.controls{position:static;max-height:none}.canvasStage{min-height:520px}}
   @media(max-width:700px){.app{padding:10px}.header{align-items:flex-start;flex-direction:column}.canvasStage{min-height:440px;padding:15px}.workspace{padding:10px}.fieldgrid{grid-template-columns:1fr 1fr}}
 
- 
   /* 左側のファイルリストを非表示にする */
   #fileList, #fileEmpty {
     display: none !important; 
@@ -101,7 +100,6 @@
   /* プレビュー画像内の×ボタン（ズームされても大きさを一定に保つ） */
   .cellRemove {
     position: absolute;
-    /* ズーム倍率（--scale）で割り算して大きさを打ち消す */
     top: calc(5px / var(--scale, 1));
     right: calc(5px / var(--scale, 1));
     width: calc(22px / var(--scale, 1));
@@ -126,7 +124,6 @@
     color: #fff;
     border-color: var(--danger);
   }
- 
 </style>
 </head>
 <body>
@@ -151,7 +148,6 @@
         </div>
         <div id="fileList" class="fileList"></div>
         <div id="fileEmpty" class="empty">まだAPNGがありません。</div>
-        <!-- ↓↓↓ ここに1行追加 ↓↓↓ -->
         <div id="loadStatus" class="status" style="display:none; margin-top:10px; background:#f2f0ff; color:var(--accent); font-weight:bold;"></div>
       </section>
 
@@ -168,13 +164,13 @@
         <h2>3. キャンバスサイズ</h2>
         <div class="fieldgrid">
           <div class="field"><label>幅(px)</label><input id="canvasW" type="number" min="20" max="2400" value="900"></div>
-          <div class="field"><label>高さ(px)</label><input id="canvasH" type="number" min="20" max="2400" value="600"></div>
+          <div class="field"><label>高さ(px)</label><input id="canvasH" type="number" min="20" max="2400" value="506"></div>
         </div>
         <div class="presetrow">
-          <button class="preset active" data-size="900x600">横長</button>
-          <button class="preset" data-size="600x900">縦長</button>
-          <button class="preset" data-size="800x800">正方形</button>
-          <button class="preset" data-size="1200x630">note横長</button>
+          <button class="preset active" data-size="900x506" data-ratio="16:9">横長 16:9</button>
+          <button class="preset" data-size="506x900" data-ratio="9:16">縦長 9:16</button>
+          <button class="preset" data-size="800x800" data-ratio="1:1">正方形</button>
+          <button class="preset" data-size="1200x630" data-ratio="1200:630">note横長</button>
         </div>
         <div class="hint">数値入力でも変更できます。プレビュー四隅の<strong>紫色のハンドル</strong>をマウスでドラッグすると直感的にサイズを決められます。</div>
       </section>
@@ -216,8 +212,13 @@
     <main class="panel workspace">
       <div class="workspaceTop">
         <div><strong>プレビュー</strong> <span class="small">各枠は自動で均等配置</span></div>
-        <div style="display:flex; align-items:center; gap:10px;">
-          <button id="removeMarginBtn" class="btn" style="padding:5px 9px; font-size:12px;">余白をすべて削除</button>
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span style="font-size:12px;color:var(--muted)">余白</span>
+            <button id="marginMinus" class="btn" style="padding:2px 8px; font-size:14px; line-height:1;">-</button>
+            <input type="range" id="marginSlider" min="0" max="40" value="8" style="width: 80px; margin:0; cursor:pointer;">
+            <button id="marginPlus" class="btn" style="padding:2px 8px; font-size:14px; line-height:1;">+</button>
+          </div>
           <div class="small"><span class="kbd">ドラッグ</span> でサイズ変更</div>
         </div>
       </div>
@@ -249,9 +250,22 @@
     duration:$('duration'), fps:$('fps'), bgColor:$('bgColor'), makeGif:$('makeGif'), progressWrap:$('progressWrap'),
     progressBar:$('progressBar'), progressLabel:$('progressLabel'), progressPct:$('progressPct'), status:$('status'),
     result:$('result'), resultImg:$('resultImg'), resultInfo:$('resultInfo'), downloadBtn:$('downloadBtn'),
-    removeMarginBtn:$('removeMarginBtn')
+    marginMinus:$('marginMinus'), marginSlider:$('marginSlider'), marginPlus:$('marginPlus')
   };
-  const state = { items: [], resize:null, workerUrl:null, resultUrl:null, draggingIndex:null, gifBusy:false, previewScale:1, noMargin:false };
+  const state = {
+    items: [],
+    resize: null,
+    workerUrl: null,
+    resultUrl: null,
+    draggingIndex: null,
+    gifBusy: false,
+    previewScale: 1,
+    margin: 8, // 余白の初期値
+
+    // 現在選択しているアスペクト比
+    aspectRatio: 16 / 9,
+    aspectMode: 'landscape'
+  };
   
   let sortableInstance = null;
   const MIN_CANVAS = 20;
@@ -289,13 +303,11 @@
       .sort((a,b) => a.name.localeCompare(b.name, 'ja', {numeric:true, sensitivity:'base'}));
     if(!list.length){ setStatus('PNG / APNGファイルを追加してください。'); return; }
     
-    // ★ドロップゾーンの文字要素を取得し、元のテキストを覚えておく
     const dropzoneStrong = els.dropzone.querySelector('strong');
     const originalText = dropzoneStrong.textContent;
 
     showProgress(true); 
     setProgress(3, 'APNGの読み込みを準備中…');
-    // ★ドロップした場所の文字も書き換える
     dropzoneStrong.textContent = '読み込みを準備中…'; 
 
     (async()=>{
@@ -305,7 +317,6 @@
         for(let i=0;i<list.length;i++){
           const msg = `${i+1} / ${list.length} 件を読み込み中…`;
           setProgress(5 + (i/list.length)*35, msg);
-          // ★目線の位置（ドロップゾーン）にリアルタイムで進捗を表示
           dropzoneStrong.textContent = msg; 
           
           await new Promise(resolve => setTimeout(resolve, 30));
@@ -314,20 +325,17 @@
           state.items.push(item);
         }
         
-        // ===== ここから追加：画像数に合わせて列数と行数を自動変更 =====
-        const count = state.items.length; // 現在の画像の総数を取得
+        const count = state.items.length; 
         if (count <= 6) {
-          els.cols.value = 2; // 6枚以下は2列
+          els.cols.value = 2; 
         } else if (count <= 12) {
-          els.cols.value = 3; // 7〜12枚は3列
+          els.cols.value = 3; 
         } else if (count <= 24) {
-          els.cols.value = 4; // 13〜24枚は4列
+          els.cols.value = 4; 
         } else {
-          els.cols.value = 5; // 25枚以上は5列
+          els.cols.value = 5; 
         }
-        // 列数に合わせて「行数」もピッタリ収まるように自動計算
         els.rows.value = Math.ceil(count / els.cols.value);
-        // ===== ここまで追加 =====
 
         setProgress(40, '画面の配置を計算中…');
         dropzoneStrong.textContent = '画面の配置を計算中…';
@@ -335,7 +343,6 @@
 
         renderAll();
         
-        // ===== 上で作った専用枠にメッセージを表示 =====
         const loadStatus = document.getElementById('loadStatus');
         if(loadStatus) {
             loadStatus.style.display = 'block';
@@ -346,11 +353,11 @@
         console.error(err); setStatus('読み込みに失敗したファイルがあります。APNGとして正しいか確認してください。');
       }finally{ 
         showProgress(false); 
-        // ★処理が終わったら、元の「ここへAPNGをまとめて...」のテキストに戻す
         dropzoneStrong.textContent = originalText; 
       }
     })();
   }
+
   function renderFileList(){
     els.fileList.innerHTML='';
     els.fileEmpty.style.display = state.items.length ? 'none':'block';
@@ -409,38 +416,61 @@
 
   function autoFitCanvasSize() {
     if (!state.items.length) return;
+
     const { rows, cols } = getRowsCols();
-    const refItem = state.items[0]; 
-    
-    const gap = state.noMargin ? 0 : 8;
-    const pad = state.noMargin ? 0 : 10;
-    
+    const refItem = state.items[0];
+
+    const gap = state.margin;
+    const pad = state.margin;
+
     const idealW = refItem.width * cols + gap * (cols - 1) + pad * 2;
     const idealH = refItem.height * rows + gap * (rows - 1) + pad * 2;
-    
-    const gridAspect = idealW / idealH;
-    
+    const ratio = state.aspectRatio || (16 / 9);
+
     let targetW = parseInt(els.canvasW.value) || 900;
-    let targetH = Math.round(targetW / gridAspect);
-    
+    let targetH = Math.round(targetW / ratio);
+
+    targetW = Math.max(targetW, idealW);
+    targetH = Math.max(targetH, idealH);
+
+    if (targetW / targetH > ratio) {
+      targetW = Math.round(targetH * ratio);
+    } else {
+      targetH = Math.round(targetW / ratio);
+    }
+
+    if (targetW > MAX_CANVAS) {
+      targetW = MAX_CANVAS;
+      targetH = Math.round(targetW / ratio);
+    }
     if (targetH > MAX_CANVAS) {
       targetH = MAX_CANVAS;
-      targetW = Math.round(targetH * gridAspect);
-    } else if (targetH < MIN_CANVAS) {
-      targetH = MIN_CANVAS;
-      targetW = Math.round(targetH * gridAspect);
+      targetW = Math.round(targetH * ratio);
     }
-    
-    targetW = clampNum(targetW, MIN_CANVAS, MAX_CANVAS);
-    targetH = clampNum(targetH, MIN_CANVAS, MAX_CANVAS);
-    
+    if (targetW < MIN_CANVAS) {
+      targetW = MIN_CANVAS;
+      targetH = Math.round(targetW / ratio);
+    }
+    if (targetH < MIN_CANVAS) {
+      targetH = MIN_CANVAS;
+      targetW = Math.round(targetH * ratio);
+    }
+
+    targetW = clampNum(Math.round(targetW), MIN_CANVAS, MAX_CANVAS);
+    targetH = clampNum(Math.round(targetH), MIN_CANVAS, MAX_CANVAS);
+
     els.canvasW.value = targetW;
     els.canvasH.value = targetH;
     els.canvasFrame.style.width = targetW + 'px';
     els.canvasFrame.style.height = targetH + 'px';
     els.sizeTag.textContent = `${targetW} × ${targetH} px`;
-    
-    document.querySelectorAll('.preset').forEach(b => b.classList.toggle('active', b.dataset.size === `${targetW}x${targetH}`));
+
+    document.querySelectorAll('.preset').forEach(b => {
+      const [bw, bh] = b.dataset.size.split('x').map(Number);
+      const buttonRatio = bw / bh;
+      const isActive = Math.abs(buttonRatio - ratio) < 0.01;
+      b.classList.toggle('active', isActive);
+    });
   }
 
   function renderGrid(changedAxis=null){
@@ -449,9 +479,7 @@
     if(changedAxis){
       ({rows,cols}=adjustGridForItemCount(changedAxis));
     }else if(state.items.length > 0){
-      // ===== 枠が足りない時だけでなく、余った時も行数をピッタリに自動調整 =====
       rows = Math.ceil(state.items.length / cols);
-      
       if(rows > 100){
         cols = Math.ceil(state.items.length / 100);
         rows = Math.ceil(state.items.length / cols);
@@ -541,22 +569,75 @@
     els.canvasFrame.style.width=ew+'px'; els.canvasFrame.style.height=eh+'px';
     els.sizeTag.textContent=`${ew} × ${eh} px`;
   }
+  
   function clampNum(v,min,max){return Math.max(min,Math.min(max,v));}
 
-  function setCanvasSize(w,h){
-    w=clampNum(Math.round(w),MIN_CANVAS,MAX_CANVAS);h=clampNum(Math.round(h),MIN_CANVAS,MAX_CANVAS);
-    els.canvasW.value=w;els.canvasH.value=h;els.canvasFrame.style.width=w+'px';els.canvasFrame.style.height=h+'px';els.sizeTag.textContent=`${w} × ${h} px`;
-    document.querySelectorAll('.preset').forEach(b=>b.classList.toggle('active',b.dataset.size===`${w}x${h}`));
+  function setAspectRatio(mode){
+    switch(mode){
+      case 'landscape': state.aspectRatio = 16 / 9; state.aspectMode = 'landscape'; break;
+      case 'portrait': state.aspectRatio = 9 / 16; state.aspectMode = 'portrait'; break;
+      case 'square': state.aspectRatio = 1; state.aspectMode = 'square'; break;
+      case 'note': state.aspectRatio = 1200 / 630; state.aspectMode = 'note'; break;
+      default: state.aspectRatio = 16 / 9; state.aspectMode = 'landscape';
+    }
+  }
+
+  function setCanvasSize(w, h){
+    w = clampNum(Math.round(w), MIN_CANVAS, MAX_CANVAS);
+    h = clampNum(Math.round(h), MIN_CANVAS, MAX_CANVAS);
+    state.aspectRatio = w / h;
+    els.canvasW.value = w;
+    els.canvasH.value = h;
+    els.canvasFrame.style.width = w + 'px';
+    els.canvasFrame.style.height = h + 'px';
+    els.sizeTag.textContent = `${w} × ${h} px`;
+
+    document.querySelectorAll('.preset').forEach(b => {
+      const [bw, bh] = b.dataset.size.split('x').map(Number);
+      const buttonRatio = bw / bh;
+      const currentRatio = w / h;
+      b.classList.toggle('active', Math.abs(buttonRatio - currentRatio) < 0.01);
+    });
+
     fitCanvasPreview();
   }
+
+  // === 余白のUI制御 ===
+  function updateMarginUI() {
+    els.marginSlider.value = state.margin;
+    els.cellGrid.style.gap = state.margin + 'px';
+    els.cellGrid.style.padding = state.margin + 'px';
+    
+    // 余白0の場合は枠線を消すクラスを付与
+    els.cellGrid.classList.toggle('no-margin', state.margin === 0);
+    
+    if (state.items.length > 0) {
+      autoFitCanvasSize();
+      fitCanvasPreview();
+    }
+  }
+
+  els.marginSlider.addEventListener('input', (e) => {
+    state.margin = parseInt(e.target.value, 10);
+    updateMarginUI();
+  });
+  
+  els.marginMinus.addEventListener('click', () => {
+    state.margin = Math.max(0, state.margin - 1);
+    updateMarginUI();
+  });
+  
+  els.marginPlus.addEventListener('click', () => {
+    state.margin = Math.min(40, state.margin + 1);
+    updateMarginUI();
+  });
 
   els.resizeHandles.forEach(handle=>{
     handle.addEventListener('pointerdown',e=>{
       e.preventDefault();
       handle.setPointerCapture?.(e.pointerId);
       state.resize={
-        startX:e.clientX,
-        startY:e.clientY,
+        startX:e.clientX, startY:e.clientY,
         startW:parseInt(els.canvasW.value)||900,
         startH:parseInt(els.canvasH.value)||600,
         startScale:state.previewScale||1,
@@ -588,18 +669,8 @@
   els.cols.addEventListener('change',()=>renderGrid('cols'));
   
   [els.canvasW,els.canvasH].forEach(x=>x.addEventListener('change',()=>setCanvasSize(parseInt(els.canvasW.value)||900,parseInt(els.canvasH.value)||600)));
-  document.querySelectorAll('.preset').forEach(btn=>btn.addEventListener('click',()=>{const [w,h]=btn.dataset.size.split('x').map(Number);setCanvasSize(w,h);}));
 
-  els.removeMarginBtn.addEventListener('click', () => {
-    state.noMargin = !state.noMargin;
-    els.removeMarginBtn.textContent = state.noMargin ? '余白を元に戻す' : '余白をすべて削除';
-    els.cellGrid.classList.toggle('no-margin', state.noMargin);
-    
-    if (state.items.length > 0) {
-      autoFitCanvasSize();
-      fitCanvasPreview();
-    }
-  });
+  document.querySelectorAll('.preset').forEach(btn=>btn.addEventListener('click',()=>{const [w,h]=btn.dataset.size.split('x').map(Number);setCanvasSize(w,h);}));
 
   function frameAt(item,timeMs){
     if(!item.frames.length)return null;
@@ -669,7 +740,7 @@
     ctx.restore();
 
     const rows=getRowsCols().rows,cols=getRowsCols().cols;
-    const gap=state.noMargin ? 0 : 8, pad=state.noMargin ? 0 : 10;
+    const gap=state.margin, pad=state.margin;
     const innerW=w-pad*2,innerH=h-pad*2;
     const cellW=(innerW-gap*(cols-1))/cols,cellH=(innerH-gap*(rows-1))/rows;
 
@@ -760,12 +831,10 @@
     }finally{state.gifBusy=false;els.makeGif.disabled=false;setTimeout(()=>showProgress(false),700);}
   }
 
-  // === GIF保存 / 共有処理 ===
   async function downloadBlob(blob, name) {
     const file = new File([blob], name, { type: 'image/gif' });
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
-    // スマホかつ共有APIが利用可能な場合
     if (isMobile && navigator.canShare && navigator.canShare({ files: [file] })) {
       try {
         await navigator.share({
@@ -776,7 +845,6 @@
         console.log('共有がキャンセルされました:', err);
       }
     } else {
-      // PC等の場合：従来の直接ダウンロード
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -798,6 +866,8 @@
   });
   els.makeGif.addEventListener('click',createGif);
 
+  // 初期化時に余白UIを反映して描画
+  updateMarginUI();
   renderGrid();
 })();
 </script>
