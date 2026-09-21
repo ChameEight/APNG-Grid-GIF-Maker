@@ -195,7 +195,7 @@
 
       <section class="section">
         <h2>5. GIFを書き出す</h2>
-        <button id="makeGif" class="btn primary wide">GIFを作成する</button>
+        <button id="makeOutput" class="btn primary wide">GIFを作成する</button>
         <div id="progressWrap" class="progressWrap">
           <div class="progressTop"><span id="progressLabel">準備中…</span><span id="progressPct">0%</span></div>
           <div class="progress"><div id="progressBar"></div></div>
@@ -247,7 +247,7 @@
     dropzone:$('dropzone'), fileInput:$('fileInput'), chooseBtn:$('chooseBtn'), fileList:$('fileList'), fileEmpty:$('fileEmpty'),
     rows:$('rows'), cols:$('cols'), canvasW:$('canvasW'), canvasH:$('canvasH'),
     canvasFrame:$('canvasFrame'), cellGrid:$('cellGrid'), resizeHandles:document.querySelectorAll('.resizeHandle'), sizeTag:$('sizeTag'), stage:$('stage'),
-    duration:$('duration'), fps:$('fps'), bgColor:$('bgColor'), makeGif:$('makeGif'), progressWrap:$('progressWrap'),
+    duration:$('duration'), fps:$('fps'), bgColor:$('bgColor'), makeOutput:$('makeOutput'), progressWrap:$('progressWrap'),
     progressBar:$('progressBar'), progressLabel:$('progressLabel'), progressPct:$('progressPct'), status:$('status'),
     result:$('result'), resultImg:$('resultImg'), resultInfo:$('resultInfo'), downloadBtn:$('downloadBtn'),
     marginMinus:$('marginMinus'), marginSlider:$('marginSlider'), marginPlus:$('marginPlus')
@@ -281,6 +281,38 @@
     if(label) els.progressLabel.textContent = label;
   }
   function showProgress(show){ els.progressWrap.classList.toggle('show', show); }
+
+  // アニメーションがない静止画のみか判定
+  function isStaticOnly() {
+    if (state.items.length === 0) return false;
+    return state.items.every(item => item.frames.length <= 1);
+  }
+
+  // 静止画のみならUIを変更する
+  function updateExportUI() {
+    const isStatic = isStaticOnly();
+    const section5h2 = els.makeOutput.closest('.section').querySelector('h2');
+    
+    if (state.items.length === 0) {
+      els.makeOutput.textContent = 'GIFを作成する';
+      if (section5h2) section5h2.textContent = '5. GIFを書き出す';
+      els.duration.disabled = false;
+      els.fps.disabled = false;
+      els.duration.closest('.fieldgrid').style.opacity = '1';
+    } else if (isStatic) {
+      els.makeOutput.textContent = 'PNGを作成する';
+      if (section5h2) section5h2.textContent = '5. PNGを書き出す';
+      els.duration.disabled = true;
+      els.fps.disabled = true;
+      els.duration.closest('.fieldgrid').style.opacity = '0.5';
+    } else {
+      els.makeOutput.textContent = 'GIFを作成する';
+      if (section5h2) section5h2.textContent = '5. GIFを書き出す';
+      els.duration.disabled = false;
+      els.fps.disabled = false;
+      els.duration.closest('.fieldgrid').style.opacity = '1';
+    }
+  }
 
   async function decodeFile(file){
     const buf = await file.arrayBuffer();
@@ -375,7 +407,11 @@
     });
   }
 
-  function renderAll(){ renderFileList(); renderGrid(); }
+  function renderAll(){ 
+    renderFileList(); 
+    renderGrid(); 
+    updateExportUI(); // 追加: UIを静止画/GIFで切り替え
+  }
 
   function getRowsCols(){
     const rows=Math.max(1,Math.min(100,parseInt(els.rows.value)||1));
@@ -730,13 +766,18 @@
     return scaled;
   }
 
-  function drawComposite(ctx,w,h,timeMs){
+  function drawComposite(ctx,w,h,timeMs, isTransparentPng = false){
     const mode=getBgMode();
     const bgRgb=mode==='color' ? hexToRgb(els.bgColor.value) : [255,255,255];
 
     ctx.save();
-    ctx.fillStyle=mode==='transparent' ? '#FF00FE' : `rgb(${bgRgb[0]},${bgRgb[1]},${bgRgb[2]})`;
-    ctx.fillRect(0,0,w,h);
+    // 透過PNG書き出しの場合はマジックピンクによる塗りつぶしをせず、Canvas自体の透過を活かす
+    if (isTransparentPng && mode === 'transparent') {
+      ctx.clearRect(0, 0, w, h);
+    } else {
+      ctx.fillStyle=mode==='transparent' ? '#FF00FE' : `rgb(${bgRgb[0]},${bgRgb[1]},${bgRgb[2]})`;
+      ctx.fillRect(0,0,w,h);
+    }
     ctx.restore();
 
     const rows=getRowsCols().rows,cols=getRowsCols().cols;
@@ -752,10 +793,12 @@
       const dw=Math.max(1,Math.round(item.width*s)),dh=Math.max(1,Math.round(item.height*s));
       const dx=Math.round(x+(cellW-dw)/2),dy=Math.round(y+(cellH-dh)/2);
 
-      if(mode==='transparent'){
+      if(mode==='transparent' && !isTransparentPng){
+        // GIF用にアルファ成分を透過キーカラーに置換する処理
         const safe=makeAlphaSafeBitmap(item,fi,dw,dh);
         ctx.putImageData(safe.getContext('2d',{willReadFrequently:true}).getImageData(0,0,dw,dh),dx,dy);
       }else{
+        // 透過PNGの場合は元の半透明ピクセルなどをそのまま描画
         const tmp=makeSourceCanvas(item,fi);
         ctx.drawImage(tmp,dx,dy,dw,dh);
       }
@@ -797,10 +840,58 @@
     const text=await res.text(); state.workerUrl=URL.createObjectURL(new Blob([text],{type:'application/javascript'})); return state.workerUrl;
   }
 
-  async function createGif(){
+  // 作成処理（静止画のみならPNG、アニメーションが含まれればGIFを生成）
+  async function createOutput(){
     if(state.gifBusy)return;
     if(!state.items.length){setStatus('先にAPNGを追加してください。');return;}
-    state.gifBusy=true; els.makeGif.disabled=true; els.result.classList.remove('show');
+    state.gifBusy=true; els.makeOutput.disabled=true; els.result.classList.remove('show');
+    
+    const isStatic = isStaticOnly();
+
+    // ------------------------------------
+    // ▼ 1. 静止画PNGのみの場合の処理 ▼
+    // ------------------------------------
+    if (isStatic) {
+      showProgress(true);setProgress(50,'PNG生成中…');
+      try {
+        const w=clampNum(parseInt(els.canvasW.value)||900,MIN_CANVAS,MAX_CANVAS);
+        const h=clampNum(parseInt(els.canvasH.value)||600,MIN_CANVAS,MAX_CANVAS);
+        const out=document.createElement('canvas');out.width=w;out.height=h;
+        const ctx=out.getContext('2d');
+        const bgMode=getBgMode();
+        const isTransparentPng = (bgMode === 'transparent');
+        
+        // Canvasに1枚だけ描画
+        drawComposite(ctx, w, h, 0, isTransparentPng);
+        
+        // PNGに変換
+        out.toBlob((blob) => {
+          state.resultUrl=URL.createObjectURL(blob); 
+          els.resultImg.src=state.resultUrl; 
+          
+          els.resultInfo.textContent=`${w}×${h}px / 静止画PNG / 背景：${bgMode==='transparent'?'透明':bgMode==='color'?'指定色':'白'} / 約${(blob.size/1024/1024).toFixed(2)}MB`; 
+          
+          els.downloadBtn.textContent = 'PNGを保存';
+          els.downloadBtn.onclick=()=>downloadBlob(blob,`grid-${Date.now()}.png`); 
+          els.result.classList.add('show');
+          
+          setProgress(100,'完成しました！');
+          setStatus('PNGが完成しました。下の「PNGを保存」から保存できます。');
+          
+          state.gifBusy=false;
+          els.makeOutput.disabled=false;
+          setTimeout(()=>showProgress(false),700);
+        }, 'image/png');
+      } catch(err) {
+        console.error(err);setStatus('PNG生成に失敗しました。');
+        state.gifBusy=false;els.makeOutput.disabled=false;setTimeout(()=>showProgress(false),700);
+      }
+      return;
+    }
+
+    // ------------------------------------
+    // ▼ 2. 従来のアニメーションGIF処理 ▼
+    // ------------------------------------
     showProgress(true);setProgress(0,'GIF生成の準備中…');
     try{
       const workerScript=await loadWorkerUrl();
@@ -814,32 +905,43 @@
       const gifOptions={workers:2,workerScript,quality:8,width:w,height:h,repeat:0};
       if(bgMode==='transparent') gifOptions.transparent=TRANSPARENT_KEY;
       const gif=new GIF(gifOptions);
+      
       for(let i=0;i<frameCount;i++){
-        const time=i*delay; drawComposite(ctx,w,h,time); gif.addFrame(out,{copy:true,delay:delay});
+        const time=i*delay; drawComposite(ctx,w,h,time,false); gif.addFrame(out,{copy:true,delay:delay});
         setProgress((i/frameCount)*62,`フレームを準備中… ${i+1} / ${frameCount}`);
         await new Promise(r=>setTimeout(r,0));
       }
+      
       await new Promise((resolve,reject)=>{
         gif.on('progress',p=>setProgress(62+p*38,`GIFをエンコード中… ${Math.round(p*100)}%`));
-        gif.on('finished',blob=>{ state.resultUrl=URL.createObjectURL(blob); els.resultImg.src=state.resultUrl; els.resultInfo.textContent=`${w}×${h}px / ${frameCount}フレーム / ${duration.toFixed(1)}秒 / 背景：${bgMode==='transparent'?'透明':bgMode==='color'?'指定色':'白'} / 約${(blob.size/1024/1024).toFixed(2)}MB`; els.downloadBtn.onclick=()=>downloadBlob(blob,`apng-grid-${Date.now()}.gif`); els.result.classList.add('show'); resolve(); });
+        gif.on('finished',blob=>{ 
+            state.resultUrl=URL.createObjectURL(blob); 
+            els.resultImg.src=state.resultUrl; 
+            els.resultInfo.textContent=`${w}×${h}px / ${frameCount}フレーム / ${duration.toFixed(1)}秒 / 背景：${bgMode==='transparent'?'透明':bgMode==='color'?'指定色':'白'} / 約${(blob.size/1024/1024).toFixed(2)}MB`; 
+            els.downloadBtn.textContent = 'GIFを保存';
+            els.downloadBtn.onclick=()=>downloadBlob(blob,`apng-grid-${Date.now()}.gif`); 
+            els.result.classList.add('show'); 
+            resolve(); 
+        });
         gif.on('abort',()=>reject(new Error('GIF生成が中断されました')));
         gif.render();
       });
       setProgress(100,'完成しました！');setStatus('GIFが完成しました。下の「GIFを保存」から保存できます。');
     }catch(err){
       console.error(err);setStatus('GIF生成に失敗しました。ブラウザのネットワーク接続、またはファイルの内容をご確認ください。');
-    }finally{state.gifBusy=false;els.makeGif.disabled=false;setTimeout(()=>showProgress(false),700);}
+    }finally{state.gifBusy=false;els.makeOutput.disabled=false;setTimeout(()=>showProgress(false),700);}
   }
 
   async function downloadBlob(blob, name) {
-    const file = new File([blob], name, { type: 'image/gif' });
+    // GIF / PNGの両方に対応させる
+    const file = new File([blob], name, { type: blob.type || 'image/gif' });
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
     if (isMobile && navigator.canShare && navigator.canShare({ files: [file] })) {
       try {
         await navigator.share({
           files: [file],
-          title: '合成GIF画像'
+          title: '合成画像'
         });
       } catch (err) {
         console.log('共有がキャンセルされました:', err);
@@ -864,7 +966,9 @@
   els.bgColor.addEventListener('input',()=>{
     if(getBgMode()==='color'){ const frame=document.querySelector('.canvasFrame'); if(frame) frame.style.background=els.bgColor.value; }
   });
-  els.makeGif.addEventListener('click',createGif);
+  
+  // イベントリスナを createOutput に変更
+  els.makeOutput.addEventListener('click',createOutput);
 
   // 初期化時に余白UIを反映して描画
   updateMarginUI();
