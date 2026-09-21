@@ -378,8 +378,10 @@
         const loadStatus = document.getElementById('loadStatus');
         if(loadStatus) {
             loadStatus.style.display = 'block';
-            loadStatus.textContent = `${state.items.length}個のAPNGを配置しました。プレビュー上の画像をドラッグして並び替えできます。`;
-        }        
+            // 静止画のみなら 'PNG'、アニメーションがあれば 'APNG' をセット
+            const fileType = isStaticOnly() ? 'PNG' : 'APNG';
+            loadStatus.textContent = `${state.items.length}個の${fileType}を配置しました。プレビュー上の画像をドラッグして並び替えできます。`;
+        }      
         
       }catch(err){
         console.error(err); setStatus('読み込みに失敗したファイルがあります。APNGとして正しいか確認してください。');
