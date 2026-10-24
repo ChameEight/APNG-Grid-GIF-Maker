@@ -169,8 +169,7 @@
         <div class="presetrow">
           <button class="preset active" data-size="900x506" data-ratio="16:9">横長 16:9</button>
           <button class="preset" data-size="506x900" data-ratio="9:16">縦長 9:16</button>
-          <button class="preset" data-size="800x800" data-ratio="1:1">正方形</button>
-          <button class="preset" data-size="1200x630" data-ratio="1200:630">note横長</button>
+          <button class="preset" data-size="800x800" data-ratio="1:1">正方形</button>          
         </div>
         <div class="hint">数値入力でも変更できます。プレビュー四隅の<strong>紫色のハンドル</strong>をマウスでドラッグすると直感的にサイズを決められます。</div>
       </section>
@@ -186,8 +185,9 @@
           <div class="bgOptions">
             <label class="radioOption"><input type="radio" name="bgMode" value="white" checked> 白</label>
             <label class="radioOption"><input type="radio" name="bgMode" value="color"> 色を指定</label>
-            <input id="bgColor" type="color" value="#ffffff" title="背景色を選択" style="height:32px;padding:2px">
-            <label class="radioOption"><input type="radio" name="bgMode" value="transparent"> 透明</label>
+          <input id="bgColor" type="color" value="#ffffff" title="背景色を選択" style="height:32px;padding:2px">          
+          <input id="bgHex" type="text" value="#FFFFFF" maxlength="7" style="width:75px; padding:4px 6px; border:1px solid var(--line); border-radius:6px; font-size:13px; text-transform:uppercase;">
+          <label class="radioOption"><input type="radio" name="bgMode" value="transparent"> 透明</label>
           </div>
         </div>
         <div class="hint">※すべてのAPNGを同じ秒数・FPSで同期して書き出します。元APNGが短い場合は自動でループします。</div>
@@ -216,10 +216,11 @@
           <div style="display:flex; align-items:center; gap:6px;">
             <span style="font-size:12px;color:var(--muted)">余白</span>
             <button id="marginMinus" class="btn" style="padding:2px 8px; font-size:14px; line-height:1;">-</button>
-            <input type="range" id="marginSlider" min="0" max="40" value="8" style="width: 80px; margin:0; cursor:pointer;">
-            <button id="marginPlus" class="btn" style="padding:2px 8px; font-size:14px; line-height:1;">+</button>
+            <input type="range" id="marginSlider" min="0" max="100" value="8" style="width: 80px; margin:0; cursor:pointer;">
+<button id="marginPlus" class="btn" style="padding:2px 8px; font-size:14px; line-height:1;">+</button>
+<input type="number" id="marginInput" min="0" max="100" value="8" style="width: 44px; padding: 2px 4px; border: 1px solid var(--line); border-radius: 6px; text-align: center; font-size: 13px;" title="余白(px)">
           </div>
-          <div class="small"><span class="kbd">ドラッグ</span> でサイズ変更</div>
+         <button id="clearAllBtn" class="btn danger" style="padding:4px 10px; font-size:12px; margin-left:8px;">全削除</button>
         </div>
       </div>
       <div id="stage" class="canvasStage">
@@ -250,7 +251,8 @@
     duration:$('duration'), fps:$('fps'), bgColor:$('bgColor'), makeOutput:$('makeOutput'), progressWrap:$('progressWrap'),
     progressBar:$('progressBar'), progressLabel:$('progressLabel'), progressPct:$('progressPct'), status:$('status'),
     result:$('result'), resultImg:$('resultImg'), resultInfo:$('resultInfo'), downloadBtn:$('downloadBtn'),
-    marginMinus:$('marginMinus'), marginSlider:$('marginSlider'), marginPlus:$('marginPlus')
+    marginMinus:$('marginMinus'), marginSlider:$('marginSlider'), marginPlus:$('marginPlus'), marginInput:$('marginInput'),
+    clearAllBtn:$('clearAllBtn')
   };
   const state = {
     items: [],
@@ -272,6 +274,8 @@
   const MAX_CANVAS = 2400;
 
   els.bgColor.disabled=true;
+  const bgHex = document.getElementById('bgHex');
+  bgHex.disabled = true;
 
   function setStatus(text){ els.status.textContent = text; }
   function setProgress(pct,label){
@@ -358,14 +362,18 @@
         }
         
         const count = state.items.length; 
-        if (count <= 6) {
+        if (count <= 4) {
           els.cols.value = 2; 
+        } else if (count <= 6) {
+          els.cols.value = 3; // 6個の時に3列（自動的に2行になります）
+        } else if (count <= 8) {
+          els.cols.value = 4; // 8個の時に4列（自動的に2行になります）
         } else if (count <= 12) {
-          els.cols.value = 3; 
-        } else if (count <= 24) {
           els.cols.value = 4; 
-        } else {
+        } else if (count <= 24) {
           els.cols.value = 5; 
+        } else {
+          els.cols.value = 6; 
         }
         els.rows.value = Math.ceil(count / els.cols.value);
 
@@ -615,7 +623,6 @@
       case 'landscape': state.aspectRatio = 16 / 9; state.aspectMode = 'landscape'; break;
       case 'portrait': state.aspectRatio = 9 / 16; state.aspectMode = 'portrait'; break;
       case 'square': state.aspectRatio = 1; state.aspectMode = 'square'; break;
-      case 'note': state.aspectRatio = 1200 / 630; state.aspectMode = 'note'; break;
       default: state.aspectRatio = 16 / 9; state.aspectMode = 'landscape';
     }
   }
@@ -643,6 +650,12 @@
   // === 余白のUI制御 ===
   function updateMarginUI() {
     els.marginSlider.value = state.margin;
+    
+    // カーソルが入力欄にある時は上書きしない（入力中のカーソル飛びを防ぐため）
+    if (document.activeElement !== els.marginInput) {
+      els.marginInput.value = state.margin;
+    }
+    
     els.cellGrid.style.gap = state.margin + 'px';
     els.cellGrid.style.padding = state.margin + 'px';
     
@@ -660,13 +673,26 @@
     updateMarginUI();
   });
   
+  els.marginInput.addEventListener('input', (e) => {
+    let val = parseInt(e.target.value, 10);
+    if (!isNaN(val)) {
+      state.margin = Math.max(0, Math.min(100, val));
+      updateMarginUI();
+    }
+  });
+
+  els.marginInput.addEventListener('blur', () => {
+    // 空欄のままフォーカスが外れた場合などに数値を補完
+    els.marginInput.value = state.margin;
+  });
+
   els.marginMinus.addEventListener('click', () => {
     state.margin = Math.max(0, state.margin - 1);
     updateMarginUI();
   });
   
   els.marginPlus.addEventListener('click', () => {
-    state.margin = Math.min(40, state.margin + 1);
+    state.margin = Math.min(100, state.margin + 1);
     updateMarginUI();
   });
 
@@ -961,16 +987,37 @@
   }
 
   document.querySelectorAll('input[name="bgMode"]').forEach(r=>r.addEventListener('change',()=>{
-    els.bgColor.disabled=getBgMode()!=='color';
+    const isColor = getBgMode()==='color';
+    els.bgColor.disabled = !isColor;
+    bgHex.disabled = !isColor;
     const frame=document.querySelector('.canvasFrame');
     if(frame) frame.style.background=getBgMode()==='transparent'?'repeating-conic-gradient(#eee 0 25%,#fff 0 50%) 0/16px 16px':(getBgMode()==='color'?els.bgColor.value:'#fff');
   }));
+
   els.bgColor.addEventListener('input',()=>{
+    bgHex.value = els.bgColor.value.toUpperCase();
     if(getBgMode()==='color'){ const frame=document.querySelector('.canvasFrame'); if(frame) frame.style.background=els.bgColor.value; }
+  });
+  
+  bgHex.addEventListener('input', (e) => {
+    const val = e.target.value;
+    if(/^#[0-9A-Fa-f]{6}$/.test(val)) {
+      els.bgColor.value = val;
+      if(getBgMode()==='color'){ const frame=document.querySelector('.canvasFrame'); if(frame) frame.style.background=els.bgColor.value; }
+    }
   });
   
   // イベントリスナを createOutput に変更
   els.makeOutput.addEventListener('click',createOutput);
+
+  els.clearAllBtn.addEventListener('click', () => {
+    if (state.items.length === 0) return; // 画像がない場合は何もしない
+    if (confirm('すべての画像を削除しますか？')) {
+      state.items = []; // 配列を空にする
+      renderAll();      // 画面を再描画
+      setStatus('すべての画像を削除しました。');
+    }
+  });
 
   // 初期化時に余白UIを反映して描画
   updateMarginUI();
